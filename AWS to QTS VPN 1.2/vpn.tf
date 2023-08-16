@@ -14,6 +14,21 @@ locals {
     203 = var.vpc_subnet_cidr_1,
     204 = var.onprem_cidr_gpvpn
   }
+
+  transit_gateway_routes = {
+    hw_lab = var.onprem_cidr_hw_lab,
+    esx_lab = var.onprem_cidr_esx_lab,
+    eve_lab = var.onprem_cidr_eve_lab,
+    gpvpn   = var.onprem_cidr_gpvpn,
+    vpc_subnet = var.vpc_subnet_cidr_1
+  }
+
+  vpc_routes = {
+    hw_lab = var.onprem_cidr_hw_lab,
+    esx_lab = var.onprem_cidr_esx_lab,
+    eve_lab = var.onprem_cidr_eve_lab,
+    gpvpn   = var.onprem_cidr_gpvpn
+  }
 }
 
 module "vpc" {
@@ -172,65 +187,23 @@ resource "aws_ec2_transit_gateway_route_table_association" "vpc_association" {
   transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
 }
 
-# Define a route for the Transit Gateway over the VPN
-resource "aws_ec2_transit_gateway_route" "vpn_attachment_route" {
-  destination_cidr_block        = var.onprem_cidr_hw_lab
-  transit_gateway_attachment_id = module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
+# Define routes for the Transit Gateway over the VPN This will loop over the transit_gateway_routes map and for each key the value will be used to fill in the destination_cidr_block. The transit_gateway_attachment_id
+# is based on the key found in the trans_gateway_routes map. If the key is vpc_subnet, then use aws_ec2_transit_gateway_vpc_attachment.dev_qts_vpc_tgw_attachment.id , otherwise use module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
+resource "aws_ec2_transit_gateway_route" "vpn_attachment_routes" {
+  for_each                        = local.transit_gateway_routes
+  destination_cidr_block          = each.value
+  transit_gateway_route_table_id  = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
+
+  transit_gateway_attachment_id   = each.key == "vpc_subnet" 
+                                    ? aws_ec2_transit_gateway_vpc_attachment.dev_qts_vpc_tgw_attachment.id 
+                                    : module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
 }
 
-# Define a route for the Transit Gateway over the VPN
-resource "aws_ec2_transit_gateway_route" "vpn_attachment_route_2" {
-  destination_cidr_block        = var.onprem_cidr_esx_lab
-  transit_gateway_attachment_id = module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
-}
-
-# Define a route for the Transit Gateway over the VPN
-resource "aws_ec2_transit_gateway_route" "vpn_attachment_route_3" {
-  destination_cidr_block        = var.onprem_cidr_eve_lab
-  transit_gateway_attachment_id = module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
-}
-
-# Define a route for the Transit Gateway over the VPN
-resource "aws_ec2_transit_gateway_route" "vpn_attachment_route_4" {
-  destination_cidr_block        = var.onprem_cidr_gpvpn
-  transit_gateway_attachment_id = module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
-}
-
-# Define a route for the VPC over the VPN
-resource "aws_ec2_transit_gateway_route" "vpn_attachment_route_5" {
-  destination_cidr_block        = var.vpc_subnet_cidr_1
-  transit_gateway_attachment_id = aws_ec2_transit_gateway_vpc_attachment.dev_qts_vpc_tgw_attachment.id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
-}
-
-# Define a route for the VPC over the VPN
-resource "aws_route" "dev_qts_vpc_route" {
+# Define routes for the VPC over the VPN. This will loop over the vpc_routes map and for each key the value will be used to fill in the destination_cidr_block
+resource "aws_route" "dev_qts_vpc_routes" {
+  for_each               = local.vpc_routes
   route_table_id         = aws_vpc.dev_qts_vpc.main_route_table_id
-  destination_cidr_block = var.onprem_cidr_hw_lab
+  destination_cidr_block = each.value
   transit_gateway_id     = aws_ec2_transit_gateway.dev_qts_tgw.id
 }
 
-# Define a route for the VPC over the VPN
-resource "aws_route" "dev_qts_vpc_route_2" {
-  route_table_id         = aws_vpc.dev_qts_vpc.main_route_table_id
-  destination_cidr_block = var.onprem_cidr_esx_lab
-  transit_gateway_id     = aws_ec2_transit_gateway.dev_qts_tgw.id
-}
-
-# Define a route for the VPC over the VPN
-resource "aws_route" "dev_qts_vpc_route_3" {
-  route_table_id         = aws_vpc.dev_qts_vpc.main_route_table_id
-  destination_cidr_block = var.onprem_cidr_eve_lab
-  transit_gateway_id     = aws_ec2_transit_gateway.dev_qts_tgw.id
-}
-
-# Define a route for the VPC over the VPN
-resource "aws_route" "dev_qts_vpc_route_4" {
-  route_table_id         = aws_vpc.dev_qts_vpc.main_route_table_id
-  destination_cidr_block = var.onprem_cidr_gpvpn
-  transit_gateway_id     = aws_ec2_transit_gateway.dev_qts_tgw.id
-}
