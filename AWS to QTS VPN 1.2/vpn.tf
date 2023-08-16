@@ -189,7 +189,7 @@ resource "aws_ec2_transit_gateway_route_table_association" "vpc_association" {
 
 # Define routes for the Transit Gateway over the VPN. This will loop over the transit_gateway_routes map and for each key the value will be used to fill in the destination_cidr_block. The transit_gateway_attachment_id
 # is based on the key found in the trans_gateway_routes map. If the key is vpc_subnet, then use aws_ec2_transit_gateway_vpc_attachment.dev_qts_vpc_tgw_attachment.id , otherwise use module.vpn_gateway.vpn_connection_transit_gateway_attachment_id
-# resource "aws_ec2_transit_gateway_route" "vpn_attachment_routes" {
+  resource "aws_ec2_transit_gateway_route" "vpn_attachment_routes" {
   for_each                        = local.transit_gateway_routes
   destination_cidr_block          = each.value
   transit_gateway_route_table_id  = aws_ec2_transit_gateway_route_table.dev_qts_tgw_rt.id
