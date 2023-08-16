@@ -1,3 +1,21 @@
+locals {
+  outbound_rules = {
+    100 = var.vpc_subnet_cidr_1,
+    101 = var.onprem_cidr_hw_lab,
+    102 = var.onprem_cidr_esx_lab,
+    103 = var.onprem_cidr_eve_lab,
+    104 = var.onprem_cidr_gpvpn
+  }
+  
+  inbound_rules = {
+    200 = var.onprem_cidr_hw_lab,
+    201 = var.onprem_cidr_esx_lab,
+    202 = var.onprem_cidr_eve_lab,
+    203 = var.vpc_subnet_cidr_1,
+    204 = var.onprem_cidr_gpvpn
+  }
+}
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.1.1"
@@ -22,115 +40,37 @@ resource "aws_customer_gateway" "dev_qts_cgw" {
 
 #Create an ACL to manage traffic in the VPC
 resource "aws_network_acl" "dev_qts_vpc_acl" {
-  vpc_id = aws_vpc.dev_qts_vpc.id
+  vpc_id = module.vpc.vpc_id
   tags = {
     Name = var.aws_network_acl_name
   }
 }
 
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "outbound_rule_0" {
+#Loop to create outbound rules for each CIDR defined in outbound_rules
+resource "aws_network_acl_rule" "outbound_rule" {
+  for_each       = local.outbound_rules
   network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 100
+  rule_number    = each.key
   egress         = true
   protocol       = "-1"
   rule_action    = "allow"
-  cidr_block     = var.vpc_subnet_cidr_1
+  cidr_block     = each.value
 }
 
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "outbound_rule_1" {
+#Loop to create inbound rules for each CIDR defined in outbound_rules
+resource "aws_network_acl_rule" "inbound_rule" {
+  for_each       = local.inbound_rules
   network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 101
-  egress         = true
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_hw_lab
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "outbound_rule_2" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 102
-  egress         = true
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_esx_lab
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "outbound_rule_3" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 103
-  egress         = true
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_eve_lab
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "outbound_rule_4" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 104
-  egress         = true
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_gpvpn
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "inbound_rule_0" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 200
+  rule_number    = each.key
   egress         = false
   protocol       = "-1"
   rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_hw_lab
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "inbound_rule_1" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 201
-  egress         = false
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_esx_lab
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "inbound_rule_2" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 202
-  egress         = false
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_eve_lab
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "inbound_rule_3" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 203
-  egress         = false
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.vpc_subnet_cidr_1
-}
-
-#Create an ACL rule to allow traffic through the VPC
-resource "aws_network_acl_rule" "inbound_rule_4" {
-  network_acl_id = aws_network_acl.dev_qts_vpc_acl.id
-  rule_number    = 204
-  egress         = false
-  protocol       = "-1"
-  rule_action    = "allow"
-  cidr_block     = var.onprem_cidr_gpvpn
+  cidr_block     = each.value
 }
 
 # Create the subnet to be used for Dev internal
 resource "aws_subnet" "dev_qts_subnet" {
-  vpc_id                  = aws_vpc.dev_qts_vpc.id
+  vpc_id                  = module.vpc.vpc_id
   cidr_block              = var.vpc_subnet_cidr_1
   availability_zone       = var.region_az
   map_public_ip_on_launch = false
@@ -212,7 +152,7 @@ module "vpn_gateway" {
 # Create Transit Gateway Attachment for the VPC
 resource "aws_ec2_transit_gateway_vpc_attachment" "dev_qts_vpc_tgw_attachment" {
   transit_gateway_id = aws_ec2_transit_gateway.dev_qts_tgw.id
-  vpc_id             = aws_vpc.dev_qts_vpc.id
+  vpc_id             = module.vpc.vpc_id
   subnet_ids         = [aws_subnet.dev_qts_subnet.id]
 
   tags = {
