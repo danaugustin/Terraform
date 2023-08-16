@@ -1,3 +1,15 @@
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.1.1"
+  name = var.aws_vpc_name
+  cidr = var.vpc_cidr_block
+  default_vpc_enable_dns_hostnames = true
+  default_vpc_enable_dns_support = true
+  tags = {
+    Name = var.aws_vpc_name
+  }
+}
+
 resource "aws_customer_gateway" "dev_qts_cgw" {
   bgp_asn    = var.bgp_asn
   ip_address = var.cgw_ip_address
@@ -7,14 +19,6 @@ resource "aws_customer_gateway" "dev_qts_cgw" {
   }
 }
 
-resource "aws_vpc" "dev_qts_vpc" {
-  cidr_block = var.vpc_cidr_block
-  enable_dns_support = true
-  enable_dns_hostnames = true
-  tags = {
-    Name = var.aws_vpc_name
-  }
-}
 
 #Create an ACL to manage traffic in the VPC
 resource "aws_network_acl" "dev_qts_vpc_acl" {
@@ -166,7 +170,7 @@ module "vpn_gateway" {
   source  = "terraform-aws-modules/vpn-gateway/aws"
   version = "3.6.0"
 
-  vpc_id = aws_vpc.dev_qts_vpc.id
+  vpc_id = module.vpc.vpc_id
 
   transit_gateway_id               = aws_ec2_transit_gateway.dev_qts_tgw.id
   customer_gateway_id              = aws_customer_gateway.dev_qts_cgw.id
